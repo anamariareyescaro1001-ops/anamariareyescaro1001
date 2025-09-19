@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Attendance · Check-in/Check-out (Local con Horarios)</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    :root { color-scheme: light dark; }
+    body { min-height:100vh; background-image: linear-gradient(to bottom,var(--tw-gradient-stops)); --tw-gradient-from:#f4f4f5; --tw-gradient-to:#e4e4e7; }
+    @media(prefers-color-scheme:dark){ body{ --tw-gradient-from:#09090b; --tw-gradient-to:#18181b; color:#e4e4e7; } }
+    .card { background: rgba(255,255,255,.9); backdrop-filter: blur(6px); border-radius: 16px; padding: 1.25rem; box-shadow: 0 10px 26px rgba(0,0,0,.08); }
+    @media(prefers-color-scheme:dark){ .card{ background: rgba(24,24,27,.8); } }
+    .btn { padding:.5rem 1rem; border-radius: .75rem; font-weight: 600; box-shadow: 0 2px 6px rgba(0,0,0,.05); }
+    .btn-primary { background:#2563eb; color:#fff; } .btn-primary:hover{ background:#1e40af; }
+    .btn-ghost { background:#f4f4f5; } @media(prefers-color-scheme:dark){ .btn-ghost{ background:#27272a; color:#e4e4e7; } }
+    .badge { display:inline-flex; align-items:center; gap:.4rem; font-size:.75rem; padding:.25rem .5rem; border-radius:999px; }
+    .pill-green{ background:#dcfce7; color:#065f46; } .pill-amber{ background:#fde68a; color:#92400e; } .pill-red{ background:#fee2e2; color:#991b1b; }
+    table { width:100%; font-size:.92rem; border-collapse:collapse; }
+    th,td{ padding:.5rem .75rem; white-space:nowrap; border-bottom:1px solid rgba(148,163,184,.3); text-align:left; }
+  </style>
+</head>
+<body class="text-zinc-900 dark:text-zinc-100">
+  <div class="max-w-6xl mx-auto p-4 md:p-8">
+    <header class="flex items-center justify-between mb-6">
+      <h1 class="text-2xl md:text-3xl font-bold">Attendance · Check-in/Check-out</h1>
+      <div id="userBar" class="hidden items-center gap-3">
+        <span id="userInfo" class="text-sm opacity-80"></span>
+        <button id="logoutBtn" class="btn-ghost btn" type="button">Salir</button>
+      </div>
+    </header>
+
+    <!-- Login -->
+    <section id="loginView" class="card max-w-md mx-auto">
+      <h2 class="text-xl font-semibold mb-4">Ingresar</h2>
+      <form id="loginForm" class="grid gap-3">
+        <div>
+          <label class="block text-sm mb-1">Correo</label>
+          <input id="email" type="email" autocomplete="username" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700" required />
+        </div>
+        <div>
+          <label class="block text-sm mb-1">Contraseña</label>
+          <input id="password" type="password" autocomplete="current-password" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700" required />
+        </div>
+        <button id="loginBtn" class="btn btn-primary" type="submit">Entrar</button>
+      </form>
+    </section>
+
+    <!-- Empleado -->
+    <section id="employeeView" class="hidden grid gap-6">
+      <div class="card">
+        <div class="flex items-center justify-between gap-4">
+          <div>
+            <h2 class="text-xl font-semibold">Mi jornada</h2>
+            <p id="todaySchedule" class="opacity-80 text-sm">Horario de hoy: —</p>
+            <p id="shiftStatus" class="opacity-80 text-sm mt-1">Cargando…</p>
+          </div>
+          <div class="flex items-center gap-3">
+            <span id="gpsBadge" class="badge">GPS: —</span>
+            <button id="checkBtn" class="btn btn-primary text-lg px-6" type="button">—</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg font-semibold">Mi historial</h3>
+          <div class="flex items-center gap-2">
+            <input type="date" id="meFrom" class="rounded-xl border px-2 py-1 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700" />
+            <input type="date" id="meTo" class="rounded-xl border px-2 py-1 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700" />
+            <button id="meFilter" class="btn btn-ghost" type="button">Filtrar</button>
+          </div>
+        </div>
+        <div class="overflow-auto max-h-[50vh]">
+          <table>
+            <thead>
+              <tr class="text-left">
+                <th>Fecha</th>
+                <th>Entrada</th>
+                <th>Salida</th>
+                <th>Duración</th>
+                <th>In (lat, lng / acc)</th>
+                <th>Out (lat, lng / acc)</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="meTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- Admin -->
+    <section id="adminView" class="hidden grid gap-6">
+      <div class="card">
+        <div class="flex items-center justify-between mb-3">
+          <h2 class="text-xl font-semibold">Admin · Jornadas</h2>
+          <div class="flex items-center gap-2">
+            <input type="date" id="admFrom" class="rounded-xl border px-2 py-1 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700" />
+            <input type="date" id="admTo" class="rounded-xl border px-2 py-1 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700" />
+            <input type="text" id="admUserQuery" placeholder="Filtrar por usuario/correo" class="rounded-xl border px-3 py-1 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700" />
+            <button id="admFilter" class="btn btn-ghost" type="button">Filtrar</button>
+            <button id="exportCsv" class="btn btn-primary" type="button">Exportar CSV</button>
+          </div>
+        </div>
+        <div class="overflow-auto max-h-[60vh]">
+          <table>
+            <thead>
+              <tr class="text-left">
+                <th>Usuario</th>
+                <th>Entrada</th>
+                <th>Salida</th>
+                <th>Duración</th>
+                <th>In (lat, lng / acc)</th>
+                <th>Out (lat, lng / acc)</th>
+                <th>Geo</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody id="admTable"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="card">
+        <h3 class="text-lg font-semibold mb-3">Usuarios</h3>
+        <form id="userForm" class="grid md:grid-cols-5 gap-3 items-end">
+          <div>
+            <label class="block text-sm mb-1">Nombre completo</label>
+            <input id="uFull" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700" required />
+          </div>
+          <div>
+            <label class="block text-sm mb-1">Correo</label>
+            <input id="uEmail" type="email" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700" required />
+          </div>
+          <div>
+            <label class="block text-sm mb-1">Contraseña</label>
+            <input id="uPass" type="password" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700" required />
+          </div>
+          <div>
+            <label class="block text-sm mb-1">Rol</label>
+            <select id="uRole" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700">
+              <option value="employee">employee</option>
+              <option value="admin">admin</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" type="submit">Crear</button>
+        </form>
+        <p class="text-xs opacity-70 mt-2">Este demo HTML-only guarda datos en tu navegador (LocalStorage).</p>
+      </div>
+
+      <div class="card">
+        <h3 class="text-lg font-semibold mb-3">Asignar horario por usuario</h3>
+        <div class="grid md:grid-cols-4 gap-3 items-end mb-3">
+          <div class="md:col-span-2">
+            <label class="block text-sm mb-1">Seleccionar usuario</label>
+            <select id="schUser" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700"></select>
+          </div>
+          <div>
+            <label class="block text-sm mb-1">Tolerancia (min)</label>
+            <input id="schGrace" type="number" min="0" value="5" class="w-full rounded-xl border px-3 py-2 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700">
+          </div>
+          <button id="schSave" class="btn btn-primary" type="button">Guardar horario</button>
+        </div>
+        <div class="overflow-auto">
+          <table>
+            <thead><tr><th>Día</th><th>Inicio</th><th>Fin</th></tr></thead>
+            <tbody id="schTable"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <footer class="mt-10 text-xs opacity-60">
+      Demo local. Para producción usa API y base de datos.
+    </footer>
+  </div>
+
+  <script>
+    // ---- Storage & utils ----
+    const LS_KEYS = { users:'mvp_users', shifts:'mvp_shifts', locations:'mvp_locations', session:'mvp_session' };
+    const nowISO = () => new Date().toISOString();
+    const fmt = (iso) => iso ? new Date(iso).toLocaleString() : '—';
+    const fmtDate = (iso) => iso ? new Date(iso).toISOString().slice(0,10) : '';
+    const duration = (start, end) => { if(!start||!end) return ''; const ms=new Date(end)-new Date(start); const sec=Math.floor(ms/1000); const h=Math.floor(sec/3600); const m=Math.floor((sec%3600)/60); return `${h}h ${m}m`; };
+    const uuid = () => crypto.randomUUID();
+    const getLS = (k, fb) => { try { return JSON.parse(localStorage.getItem(k)) ?? fb; } catch { return fb; } };
+    const setLS = (k,v) => localStorage.setItem(k, JSON.stringify(v));
+
+    function defaultSchedule(){ return { graceMinutes:5, days: { mon:{start:'',end:''}, tue:{start:'',end:''}, wed:{start:'',end:''}, thu:{start:'',end:''}, fri:{start:'',end:''}, sat:{start:'',end:''}, sun:{start:'',end:''} } }; }
+
+    // Ensure exactly two known accounts exist (won't remove others)
+    function ensureUser(arr, full_name, email, password, role) {
+      let u = arr.find(x => x.email.toLowerCase() === email.toLowerCase());
+      if (!u) {
+        u = { id: uuid(), full_name, email, password, role, schedule: defaultSchedule(), created_at: nowISO() };
+        arr.push(u);
+      }
+      return u;
+    }
+    function seedInitialUsers() {
+      const arr = getLS(LS_KEYS.users, []);
+      ensureUser(arr, 'Admin Tecnelco', 'admin@tecnelco.com', 'A!9vQm7#Lp', 'admin');
+      ensureUser(arr, 'Empleado Tecnelco', 'empleado@tecnelco.com', 'R5*zNc2!Hw', 'employee');
+      setLS(LS_KEYS.users, arr);
+    }
+
+    // ---- Users & session ----
+    const getUsers = ()=> getLS(LS_KEYS.users, []);
+    const setUsers = a => setLS(LS_KEYS.users, a);
+    function findUserById(id){ return getUsers().find(u => u.id === id); }
+    function findUserByEmail(email){ return getUsers().find(u => u.email.toLowerCase() === email.toLowerCase()); }
+    function currentSession(){ return getLS(LS_KEYS.session, null); }
+    function setSession(u){ setLS(LS_KEYS.session, { user_id: u.id, email: u.email, role: u.role, full_name: u.full_name }); }
+    function clearSession(){ localStorage.removeItem(LS_KEYS.session); }
+    function login(email, pass){ const u=findUserByEmail(email); if(!u || u.password !== pass) throw new Error('Credenciales inválidas'); setSession(u); return u; }
+    function addUser(full, email, pass, role='employee'){ const a=getUsers(); if(a.some(x => x.email.toLowerCase()===email.toLowerCase())) throw new Error('El correo ya existe'); a.push({ id:uuid(), full_name:full, email, password:pass, role, schedule: defaultSchedule(), created_at: nowISO() }); setUsers(a); }
+
+    // ---- Shifts & Locations ----
+    const getShifts = ()=> getLS(LS_KEYS.shifts, []);
+    const setShifts = a => setLS(LS_KEYS.shifts, a);
+    const getLocations = ()=> getLS(LS_KEYS.locations, []);
+    const setLocations = a => setLS(LS_KEYS.locations, a);
+    function getOpenShift(uid){ return getShifts().find(s => s.user_id === uid && !s.ended_at); }
+    function createShift(uid){ const s={ id:uuid(), user_id:uid, started_at:nowISO(), ended_at:null, duration_seconds:null, created_at:nowISO() }; const a=getShifts(); a.push(s); setShifts(a); return s; }
+    function closeShift(id){ const a=getShifts(); const i=a.findIndex(s=>s.id===id); if(i===-1) return null; a[i].ended_at=nowISO(); a[i].duration_seconds=Math.floor((new Date(a[i].ended_at)-new Date(a[i].started_at))/1000); setShifts(a); return a[i]; }
+    function addLocation(shift_id, kind, geo){ const l={ id:uuid(), shift_id, kind, captured_at:nowISO(), ...geo }; const a=getLocations(); a.push(l); setLocations(a); return l; }
+    function findLocation(shift_id, kind){ return getLocations().find(l => l.shift_id === shift_id && l.kind === kind); }
+
+    // ---- Schedule helpers ----
+    const DAY_LABELS = { mon:'Lunes', tue:'Martes', wed:'Miércoles', thu:'Jueves', fri:'Viernes', sat:'Sábado', sun:'Domingo' };
+    const SCH_ROWS = ['mon','tue','wed','thu','fri','sat','sun'];
+    const todayKey = ()=> ['sun','mon','tue','wed','thu','fri','sat'][new Date().getDay()];
+    const parseHM = s => { if(!s) return null; const [h,m]=s.split(':').map(n=>parseInt(n,10)); if(Number.isNaN(h)||Number.isNaN(m)) return null; return h*60+m; };
+    const minutesNow = ()=> new Date().getHours()*60 + new Date().getMinutes();
+    function describeTodaySchedule(user){ const sch=user?.schedule||defaultSchedule(); const d=sch.days[todayKey()]; if(!d||!d.start||!d.end) return 'Sin horario'; return `${d.start}–${d.end} (tolerancia ${sch.graceMinutes??5} min)`; }
+    function statusAgainstSchedule(user, started_at, ended_at){ const sch=user?.schedule||defaultSchedule(); const dk=['sun','mon','tue','wed','thu','fri','sat'][new Date(started_at).getDay()]; const d=sch.days[dk]; if(!d||!d.start||!d.end) return 'sin_horario'; const startMin=parseHM(d.start), endMin=parseHM(d.end), grace=sch.graceMinutes??5; const inMin=new Date(started_at).getHours()*60+new Date(started_at).getMinutes(); const outMin=ended_at?new Date(ended_at).getHours()*60+new Date(ended_at).getMinutes():null; let tin='ok', tout='ok'; if(inMin>startMin+grace) tin='tarde'; if(outMin!=null && outMin<endMin-grace) tout='salida_anticipada'; if(tin==='ok' && (tout==='ok'||outMin==null)) return 'en_horario'; if(tin==='tarde' && (tout==='ok'||outMin==null)) return 'tarde'; if(tout==='salida_anticipada') return 'salida_anticipada'; return 'fuera_de_horario'; }
+
+    // ---- UI refs ----
+    const loginView = document.getElementById('loginView');
+    const employeeView = document.getElementById('employeeView');
+    const adminView = document.getElementById('adminView');
+    const userBar = document.getElementById('userBar');
+    const userInfo = document.getElementById('userInfo');
+    const logoutBtn = document.getElementById('logoutBtn');
+
+    const emailEl = document.getElementById('email');
+    const passEl = document.getElementById('password');
+
+    const todayScheduleEl = document.getElementById('todaySchedule');
+    const shiftStatus = document.getElementById('shiftStatus');
+    const gpsBadge = document.getElementById('gpsBadge');
+    const checkBtn = document.getElementById('checkBtn');
+
+    const meFrom = document.getElementById('meFrom');
+    const meTo = document.getElementById('meTo');
+    const meFilter = document.getElementById('meFilter');
+    const meTable = document.getElementById('meTable');
+
+    const admFrom = document.getElementById('admFrom');
+    const admTo = document.getElementById('admTo');
+    const admUserQuery = document.getElementById('admUserQuery');
+    const admFilter = document.getElementById('admFilter');
+    const admTable = document.getElementById('admTable');
+    const exportCsv = document.getElementById('exportCsv');
+
+    const uFull = document.getElementById('uFull');
+    const uEmail = document.getElementById('uEmail');
+    const uPass = document.getElementById('uPass');
+    const uRole = document.getElementById('uRole');
+    const userForm = document.getElementById('userForm');
+
+    const schUser = document.getElementById('schUser');
+    const schTable = document.getElementById('schTable');
+    const schSave = document.getElementById('schSave');
+    const schGrace = document.getElementById('schGrace');
+
+    function setBadge(el, label, kind='neutral'){ el.textContent = label; el.className = 'badge ' + (kind==='ok'?'pill-green':kind==='warn'?'pill-amber':kind==='err'?'pill-red':''); }
+
+    // ---- Render flows ----
+    function renderApp(){
+      seedInitialUsers();
+      const sess = currentSession();
+      userBar.classList.toggle('hidden', !sess);
+      userInfo.textContent = sess ? `${sess.full_name} · ${sess.role}` : '';
+      loginView.classList.add('hidden'); employeeView.classList.add('hidden'); adminView.classList.add('hidden');
+      if (!sess) { loginView.classList.remove('hidden'); return; }
+      if (sess.role === 'admin') { adminView.classList.remove('hidden'); renderAdminTable(); renderSchedulePanel(); }
+      else { employeeView.classList.remove('hidden'); renderEmployee(); renderMeTable(); }
+    }
+
+    function renderEmployee(){
+      const sess=currentSession(); const me=findUserById(sess.user_id);
+      todayScheduleEl.textContent='Horario de hoy: '+describeTodaySchedule(me);
+      const open=getOpenShift(sess.user_id);
+      if(open){ shiftStatus.textContent=`En jornada desde ${fmt(open.started_at)}`; checkBtn.textContent='Check-out'; }
+      else{ shiftStatus.textContent='Fuera de jornada'; checkBtn.textContent='Check-in'; }
+      setBadge(gpsBadge,'GPS: —','warn');
+    }
+
+    function within(iso,from,to){ if(!iso) return false; const d=new Date(iso).getTime(); const f=from?new Date(from).getTime():-Infinity; const t=to?(new Date(to).getTime()+24*3600*1000-1):Infinity; return d>=f && d<=t; }
+    function rowStatus(user,s){ const tag=statusAgainstSchedule(user,s.started_at,s.ended_at); if(tag==='en_horario') return '<span class="badge pill-green">OK</span>'; if(tag==='tarde') return '<span class="badge pill-amber">Tarde</span>'; if(tag==='salida_anticipada') return '<span class="badge pill-amber">Salida anticipada</span>'; if(tag==='sin_horario') return '<span class="badge">Sin horario</span>'; return '<span class="badge pill-red">Fuera de horario</span>'; }
+
+    function renderMeTable(){
+      const sess=currentSession(); const me=findUserById(sess.user_id);
+      const from=meFrom.value||null; const to=meTo.value||null;
+      const rows=getShifts().filter(s=>s.user_id===sess.user_id && within(s.started_at, from, to));
+      meTable.innerHTML=rows.map(s=>{ const inL=findLocation(s.id,'check_in'); const outL=findLocation(s.id,'check_out'); return `<tr>
+        <td>${fmtDate(s.started_at)}</td><td>${fmt(s.started_at)}</td><td>${fmt(s.ended_at)}</td>
+        <td>${duration(s.started_at,s.ended_at)}</td>
+        <td>${inL?`${inL.lat?.toFixed(5)}, ${inL.lng?.toFixed(5)} / ${inL.accuracy??'—'}m`:'—'}</td>
+        <td>${outL?`${outL.lat?.toFixed(5)}, ${outL.lng?.toFixed(5)} / ${outL.accuracy??'—'}m`:'—'}</td>
+        <td>${rowStatus(me,s)}</td>
+      </tr>`; }).join('');
+    }
+
+    function renderAdminTable(){
+      const from=admFrom.value||null; const to=admTo.value||null; const q=(admUserQuery.value||'').toLowerCase();
+      const users=getUsers(); const rows=getShifts().filter(s=>within(s.started_at, from, to));
+      admTable.innerHTML=rows.map(s=>{ const u=users.find(x=>x.id===s.user_id)||{full_name:'—',email:'—',schedule:defaultSchedule()}; const inL=findLocation(s.id,'check_in'); const outL=findLocation(s.id,'check_out'); const ut=`${u.full_name} &lt;${u.email}&gt;`; if(q && !ut.toLowerCase().includes(q)) return ''; return `<tr>
+        <td>${ut}</td><td>${fmt(s.started_at)}</td><td>${fmt(s.ended_at)}</td><td>${duration(s.started_at,s.ended_at)}</td>
+        <td>${inL?`${inL.lat?.toFixed(5)}, ${inL.lng?.toFixed(5)} / ${inL.accuracy??'—'}m`:'—'}</td>
+        <td>${outL?`${outL.lat?.toFixed(5)}, ${outL.lng?.toFixed(5)} / ${outL.accuracy??'—'}m`:'—'}</td>
+        <td>${inL?.geolocation_status ?? '—'} / ${outL?.geolocation_status ?? '—'}</td>
+        <td>${rowStatus(u,s)}</td>
+      </tr>`; }).join('');
+    }
+
+    // ---- Schedule panel ----
+    function schRow(k,d){ const lbl=DAY_LABELS[k]||k; const start=d?.start||''; const end=d?.end||''; return `<tr><td>${lbl}</td>
+      <td><input type="time" data-d="${k}" data-k="start" value="${start}" class="rounded-xl border px-2 py-1 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700"></td>
+      <td><input type="time" data-d="${k}" data-k="end" value="${end}" class="rounded-xl border px-2 py-1 bg-white dark:bg-zinc-950 border-zinc-300 dark:border-zinc-700"></td></tr>`; }
+    function renderSchedulePanel(){ const users=getUsers(); schUser.innerHTML=users.map(u=>`<option value="${u.id}">${u.full_name} &lt;${u.email}&gt;</option>`).join(''); const u=users[0]; if(!u){schTable.innerHTML=''; return;} loadScheduleFor(u.id); }
+    function loadScheduleFor(userId){ const u=findUserById(userId); const sch=u?.schedule||defaultSchedule(); schGrace.value=sch.graceMinutes??5; schTable.innerHTML=['mon','tue','wed','thu','fri','sat','sun'].map(k=>schRow(k, sch.days[k])).join(''); }
+    function saveSchedule(){ const userId=schUser.value; if(!userId) return; const sch=defaultSchedule(); sch.graceMinutes=parseInt(schGrace.value||'5',10); schTable.querySelectorAll('input[type="time"]').forEach(inp=>{ const d=inp.dataset.d,k=inp.dataset.k; sch.days[d][k]=inp.value||''; }); const a=getUsers(); const i=a.findIndex(u=>u.id===userId); if(i===-1) return alert('Usuario no encontrado'); a[i].schedule=sch; setUsers(a); alert('Horario guardado'); renderEmployee(); renderMeTable(); renderAdminTable(); }
+
+    // ---- Events ----
+    document.getElementById('loginForm').addEventListener('submit', (e) => {
+      e.preventDefault(); // evita recarga (Enter)
+      try {
+        login(emailEl.value.trim(), passEl.value.trim());
+        // NOTA: NO limpiamos inputs aquí para que no "desaparezcan" si fallan
+        renderApp();
+      } catch(err) {
+        alert(err.message || 'No se pudo iniciar sesión');
+      }
+    });
+    logoutBtn.addEventListener('click', () => { clearSession(); renderApp(); });
+    checkBtn.addEventListener('click', async () => {
+      const sess=currentSession(); if(!sess) return;
+      const geo=await getCurrentPosition();
+      if(geo.geolocation_status==='granted') setBadge(gpsBadge,'GPS: capturado','ok');
+      else if(geo.geolocation_status==='timeout') setBadge(gpsBadge,'GPS: timeout','warn');
+      else if(geo.geolocation_status==='denied') setBadge(gpsBadge,'GPS: denegado','err');
+      else setBadge(gpsBadge,'GPS: '+geo.geolocation_status,'warn');
+      const open=getOpenShift(sess.user_id);
+      if(!open){ const s=createShift(sess.user_id); addLocation(s.id,'check_in',geo); }
+      else { const s=closeShift(open.id); addLocation(s.id,'check_out',geo); }
+      renderEmployee(); renderMeTable(); renderAdminTable();
+    });
+    meFilter.addEventListener('click', renderMeTable);
+    admFilter.addEventListener('click', renderAdminTable);
+    exportCsv.addEventListener('click', () => {
+      const users=getUsers(); const rows=getShifts().map(s=>{ const u=users.find(x=>x.id===s.user_id)||{}; const inL=findLocation(s.id,'check_in')||{}; const outL=findLocation(s.id,'check_out')||{}; const tag=u?statusAgainstSchedule(u,s.started_at,s.ended_at):'n/a'; return { user_full_name:u.full_name||'', email:u.email||'', shift_id:s.id, started_at:s.started_at, ended_at:s.ended_at||'', duration_seconds:s.duration_seconds||'', checkin_lat:inL.lat??'', checkin_lng:inL.lng??'', checkin_accuracy:inL.accuracy??'', checkout_lat:outL.lat??'', checkout_lng:outL.lng??'', checkout_accuracy:outL.accuracy??'', geolocation_status_in:inL.geolocation_status||'', geolocation_status_out:outL.geolocation_status||'', schedule_status:tag }; });
+      const headers=Object.keys(rows[0]||{placeholder:''}); const csv=[headers.join(',')].concat(rows.map(r=>headers.map(h=>String(r[h]??'').replaceAll('"','""')).map(v=>(/[,"]/).test(v)?`"${v}"`:v).join(','))).join('\n');
+      const blob=new Blob([csv],{type:'text/csv;charset=utf-8;'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.href=url; a.download='attendance_export_'+new Date().toISOString().slice(0,10)+'.csv'; document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+    });
+    userForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      try {
+        addUser(uFull.value.trim(), uEmail.value.trim(), uPass.value.trim(), uRole.value);
+        uFull.value=''; uEmail.value=''; uPass.value=''; uRole.value='employee';
+        alert('Usuario creado');
+        renderSchedulePanel(); renderAdminTable();
+      } catch(err) {
+        alert(err.message || 'No se pudo crear usuario');
+      }
+    });
+    schUser.addEventListener('change', () => loadScheduleFor(schUser.value));
+    schSave.addEventListener('click', saveSchedule);
+
+    // ---- Start ----
+    renderApp();
+  </script>
+</body>
+</html>
